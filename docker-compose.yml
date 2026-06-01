@@ -2,7 +2,11 @@ services:
   toolbridge:
     build: .
     restart: always
-    # 使用 host 网络模式，可直接访问宿主机的 127.0.0.1 服务
+    # host 网络模式：容器直接使用宿主机网络
+    # - 可直接访问宿主机 127.0.0.1 上的服务
+    # - 无需端口映射，服务直接监听在宿主机端口上
+    # - 同机其他容器的API，用 127.0.0.1:容器映射端口
+    # 注意：不要用外网IP回环访问本机服务，很多服务器不支持 hairpin NAT
     network_mode: host
     environment:
       - PYTHONUNBUFFERED=1

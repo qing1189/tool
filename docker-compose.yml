@@ -18,8 +18,3 @@ services:
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
     ports:
       - "${PORT:-8080}:8080"
-    volumes:
-      - toolbridge_config:/root/.toolbridge
-
-volumes:
-  toolbridge_config:

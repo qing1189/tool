@@ -224,7 +224,7 @@ def begin_sse_response(handler: Any) -> None:
     handler.send_response(200)
     handler.send_header("Content-Type", "text/event-stream")
     handler.send_header("Cache-Control", "no-cache")
-    handler.send_header("Connection", "keep-alive")
+    handler.send_header("Connection", "close")
     handler.send_header("Access-Control-Allow-Origin", "*")
     handler.end_headers()
 

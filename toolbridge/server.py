@@ -48,6 +48,10 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     server: BridgeServer
 
+    # Disable HTTP keep-alive to ensure connection closes after each response.
+    # This prevents streaming responses from hanging the client.
+    protocol_version = "HTTP/1.0"
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")

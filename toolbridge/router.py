@@ -109,6 +109,12 @@ def _passthrough_chat(handler: Any, body: dict, stream: bool, settings: Settings
                     break
                 handler.wfile.write(line)
                 handler.wfile.flush()
+                # Detect end of SSE stream: "data: [DONE]"
+                if line.strip() == b'data: [DONE]':
+                    # Write the trailing empty line and break
+                    handler.wfile.write(b'\n')
+                    handler.wfile.flush()
+                    break
         except (BrokenPipeError, ConnectionResetError):
             print(f"[router] passthrough_chat: client disconnected", flush=True)
         except (TimeoutError, OSError) as exc:

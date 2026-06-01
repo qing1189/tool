@@ -2,10 +2,12 @@ services:
   toolbridge:
     build: .
     restart: always
+    # 使用 host 网络模式，可直接访问宿主机的 127.0.0.1 服务
+    network_mode: host
     environment:
       - PYTHONUNBUFFERED=1
       - HOST=0.0.0.0
-      - PORT=8080
+      - PORT=${PORT:-8080}
       - UPSTREAM_BASE_URL=${UPSTREAM_BASE_URL:-http://127.0.0.1:3000}
       - UPSTREAM_AUTH_HEADER=${UPSTREAM_AUTH_HEADER:-}
       - UPSTREAM_TIMEOUT_SECONDS=${UPSTREAM_TIMEOUT_SECONDS:-240}
@@ -18,5 +20,3 @@ services:
       - RETRY_DELAY_SECONDS=${RETRY_DELAY_SECONDS:-0}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - API_KEYS_JSON=${API_KEYS_JSON:-[]}
-    ports:
-      - "${PORT:-8080}:8080"

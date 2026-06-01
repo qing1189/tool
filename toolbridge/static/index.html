@@ -209,6 +209,16 @@ function renderMain() {
     </div>
   </div>
   <div class="card">
+    <h2>API Key 认证</h2>
+    <div class="hint" style="margin-bottom:12px;">客户端调用 /v1/* 接口时需要携带的 API Key（不设置则无需认证）</div>
+    <div class="model-list" id="apiKeysList"></div>
+    <div style="margin-top:8px;display:flex;gap:8px;">
+      <input type="text" id="newApiKey" placeholder="输入新的 API Key" style="flex:1;" onkeydown="if(event.key===\'Enter\')addApiKey()">
+      <button class="btn btn-secondary" onclick="generateApiKey()">随机生成</button>
+      <button class="btn btn-primary" onclick="addApiKey()">添加</button>
+    </div>
+  </div>
+  <div class="card">
     <h2>模型管理</h2>
     <div class="fetch-models-row">
       <button class="btn btn-secondary" onclick="fetchUpstreamModels()">从上游获取模型列表</button>
@@ -268,6 +278,7 @@ let currentConfig = {};
 let publicModelIds = [];
 let nativeModelIds = [];
 let modelMapping = {};
+let apiKeys = [];
 
 async function loadConfig() {
   try {
@@ -296,6 +307,8 @@ function populateForm(cfg) {
   renderNativeModels();
   modelMapping = cfg.MODEL_MAP_JSON || {};
   renderMappingTable();
+  apiKeys = cfg.API_KEYS_JSON || [];
+  renderApiKeys();
 }
 
 function renderPublicModels() {
@@ -323,6 +336,24 @@ function renderMappingTable() {
 function addMappingRow() { modelMapping[''] = ''; renderMappingTable(); }
 function removeMappingRow(i) { const e = Object.entries(modelMapping); e.splice(i, 1); modelMapping = Object.fromEntries(e); renderMappingTable(); }
 function collectMapping() { const rows = document.querySelectorAll('#mappingBody .mapping-row'); const r = {}; rows.forEach(row => { const k = row.querySelector('[data-field="key"]').value.trim(); const v = row.querySelector('[data-field="value"]').value.trim(); if (k) r[k] = v; }); return r; }
+
+
+function renderApiKeys() {
+  const c = document.getElementById('apiKeysList');
+  if (!c) return;
+  c.innerHTML = apiKeys.map((key, i) => {
+    const masked = key.length > 8 ? key.slice(0, 4) + '****' + key.slice(-4) : '****';
+    return `<span class="model-tag" style="background:#fff7e6;border-color:#ffd591;color:#d46b08;">${masked}<span class="remove" onclick="removeApiKey(${i})">\u00d7</span></span>`;
+  }).join('');
+}
+function addApiKey() { const input = document.getElementById('newApiKey'); const v = input.value.trim(); if (v && !apiKeys.includes(v)) { apiKeys.push(v); renderApiKeys(); input.value = ''; } }
+function removeApiKey(i) { apiKeys.splice(i, 1); renderApiKeys(); }
+function generateApiKey() {
+  const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let key = 'sk-';
+  for (let i = 0; i < 32; i++) key += chars.charAt(Math.floor(Math.random() * chars.length));
+  document.getElementById('newApiKey').value = key;
+}
 
 async function fetchUpstreamModels() {
   const statusEl = document.getElementById('fetchStatus');
@@ -369,6 +400,7 @@ async function saveConfig() {
     FC_ERROR_RETRY: document.getElementById('fc_retry').checked,
     FC_ERROR_RETRY_MAX_ATTEMPTS: parseInt(document.getElementById('max_retry').value) || 3,
     RETRY_DELAY_SECONDS: parseFloat(document.getElementById('retry_delay').value) || 0,
+    API_KEYS_JSON: apiKeys,
   };
   try {
     const resp = await api('POST', '/admin/api/config', config);

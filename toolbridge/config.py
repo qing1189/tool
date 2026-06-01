@@ -68,6 +68,7 @@ class Settings:
     max_retry_attempts: int = 3
     retry_delay_seconds: float = 0.0
     admin_password: str = ""
+    api_keys: list[str] = field(default_factory=list)
 
     # ------------------------------------------------------------------
     # Model resolution helpers
@@ -110,6 +111,7 @@ class Settings:
         "max_retry_attempts": "FC_ERROR_RETRY_MAX_ATTEMPTS",
         "retry_delay_seconds": "RETRY_DELAY_SECONDS",
         "admin_password": "ADMIN_PASSWORD",
+        "api_keys": "API_KEYS_JSON",
     }
 
     def to_dict(self) -> dict:
@@ -141,6 +143,7 @@ class Settings:
             max_retry_attempts=int(data.get("FC_ERROR_RETRY_MAX_ATTEMPTS", 3)),
             retry_delay_seconds=float(data.get("RETRY_DELAY_SECONDS", 0)),
             admin_password=str(data.get("ADMIN_PASSWORD", "")),
+            api_keys=list(data.get("API_KEYS_JSON", [])),
         )
 
     # ------------------------------------------------------------------
@@ -165,4 +168,5 @@ class Settings:
             max_retry_attempts=_env_int("FC_ERROR_RETRY_MAX_ATTEMPTS", 3),
             retry_delay_seconds=float(os.environ.get("RETRY_DELAY_SECONDS", "0")),
             admin_password=_env_str("ADMIN_PASSWORD"),
+            api_keys=_env_json_list("API_KEYS_JSON"),
         )

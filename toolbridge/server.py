@@ -52,6 +52,27 @@ class BridgeHandler(BaseHTTPRequestHandler):
     # This prevents streaming responses from hanging the client.
     protocol_version = "HTTP/1.0"
 
+    def _check_api_key(self) -> bool:
+        """Check API key for /v1/* endpoints. Returns True if authorized."""
+        settings = self.server.current_settings
+        # No keys configured = open access
+        if not settings.api_keys:
+            return True
+        # Check Authorization header
+        auth = self.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            key = auth[7:].strip()
+            if key in settings.api_keys:
+                return True
+        # Unauthorized
+        body = b'{"error": {"message": "Invalid API key", "type": "invalid_request_error", "code": "invalid_api_key"}}'
+        self.send_response(401)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+        return False
+
     def do_OPTIONS(self) -> None:
         self.send_response(204)
         self.send_header("Access-Control-Allow-Origin", "*")
@@ -61,7 +82,7 @@ class BridgeHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         path = self.path.split("?")[0]  # strip query string
-        # Admin routes
+        # Admin routes (no API key required)
         if path == "/admin" or path == "/admin/":
             handle_admin_page(self)
         elif path == "/admin/api/config":
@@ -70,7 +91,12 @@ class BridgeHandler(BaseHTTPRequestHandler):
             handle_admin_status(self, self.server.current_settings)
         elif path == "/admin/api/auth_check":
             handle_admin_check_auth(self, self.server.current_settings)
+        elif path == "/health":
+            dispatch(self, self.server.current_settings, "GET", self.path, None)
         else:
+            # API endpoints require key check
+            if path.startswith("/v1/") and not self._check_api_key():
+                return
             dispatch(self, self.server.current_settings, "GET", self.path, None)
 
     def do_HEAD(self) -> None:
@@ -100,6 +126,11 @@ class BridgeHandler(BaseHTTPRequestHandler):
         # For passthrough, we read body here and pass it through dispatch.
         clean_path = path.rstrip("/") if path != "/" else path
         from .router import _ROUTE_TABLE
+
+        # API endpoints require key check
+        if path.startswith("/v1/") and not self._check_api_key():
+            return
+
         if (self.command, clean_path) in _ROUTE_TABLE:
             dispatch(self, self.server.current_settings, "POST", self.path, None)
         else:

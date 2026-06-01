@@ -145,10 +145,16 @@ def apply_config(data: dict, settings: Settings) -> Settings:
             if isinstance(data[key], str):
                 data[key] = data[key].lower() in ("true", "1", "yes", "on")
 
-    # Save to disk
+    # Save to disk (automatically excludes ADMIN_PASSWORD, PORT, HOST)
     save_config(data)
 
+    # Preserve non-persisted fields from current settings for hot-reload
+    data.setdefault("HOST", settings.listen_host)
+    data.setdefault("PORT", settings.listen_port)
+    data.setdefault("ADMIN_PASSWORD", settings.admin_password)
+
     # Return new Settings instance
+    return Settings.from_dict(data)
     return Settings.from_dict(data)
 
 

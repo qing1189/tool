@@ -35,17 +35,23 @@ def _should_launch_gui() -> bool:
 
 
 def _load_settings() -> Settings:
-    """Load from config file first, fall back to environment.
+    """Load settings by merging persisted config with environment variables.
 
-    This allows the web admin to persist config changes that survive restarts.
+    Priority:
+    - PORT, HOST, ADMIN_PASSWORD: always from environment (not persisted)
+    - Everything else: persisted config file > environment variables
     """
     from .config_file import load_config
 
     file_cfg = load_config()
     if file_cfg:
-        print("[bridge] loaded configuration from config file")
+        print("[bridge] loaded persisted configuration from config file", flush=True)
+        # Merge: env overrides for non-persisted fields
+        file_cfg["HOST"] = os.environ.get("HOST", "0.0.0.0").strip()
+        file_cfg["PORT"] = int(os.environ.get("PORT", "8080"))
+        file_cfg["ADMIN_PASSWORD"] = os.environ.get("ADMIN_PASSWORD", "").strip()
         return Settings.from_dict(file_cfg)
-    print("[bridge] using environment variables for configuration")
+    print("[bridge] no config file found, using environment variables", flush=True)
     return Settings.from_environment()
 
 

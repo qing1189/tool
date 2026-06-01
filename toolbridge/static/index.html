@@ -342,8 +342,7 @@ function renderApiKeys() {
   const c = document.getElementById('apiKeysList');
   if (!c) return;
   c.innerHTML = apiKeys.map((key, i) => {
-    const masked = key.length > 8 ? key.slice(0, 4) + '****' + key.slice(-4) : '****';
-    return `<span class="model-tag" style="background:#fff7e6;border-color:#ffd591;color:#d46b08;">${masked}<span class="remove" onclick="removeApiKey(${i})">\u00d7</span></span>`;
+    return `<span class="model-tag" style="background:#fff7e6;border-color:#ffd591;color:#d46b08;">${key}<span class="remove" onclick="removeApiKey(${i})">\u00d7</span></span>`;
   }).join('');
 }
 function addApiKey() { const input = document.getElementById('newApiKey'); const v = input.value.trim(); if (v && !apiKeys.includes(v)) { apiKeys.push(v); renderApiKeys(); input.value = ''; } }

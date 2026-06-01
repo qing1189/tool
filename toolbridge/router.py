@@ -503,6 +503,10 @@ def _stream_anthropic_response(handler: Any, anthropic_resp: dict, requested_mod
 # ---------------------------------------------------------------------------
 
 def handle_passthrough(handler: Any, settings: Settings, method: str, path: str, body: bytes | None) -> None:
+    # Only proxy /v1/* paths to upstream; return 404 for everything else
+    if not path.startswith("/v1/"):
+        _send_json(handler, 404, {"error": "not found"})
+        return
     try:
         status, resp_body, hdrs = fetch_upstream(method, path, body, settings)
         handler.send_response(status)
@@ -514,6 +518,8 @@ def handle_passthrough(handler: Any, settings: Settings, method: str, path: str,
         handler.wfile.write(resp_body)
     except UpstreamError as exc:
         _send_json(handler, 502, {"error": f"upstream error: {exc.status}"})
+    except Exception as exc:
+        _send_json(handler, 502, {"error": f"upstream connection failed: {exc}"})
 
 
 # ---------------------------------------------------------------------------
@@ -541,7 +547,7 @@ def dispatch(handler: Any, settings: Settings, method: str, path: str, body: byt
         except BridgeError as exc:
             _send_json(handler, 500, {"error": str(exc)})
         except Exception as exc:
-            _send_json(handler, 500, {"error": f"internal error: {exc}"})
+            _send_json(handler, 502, {"error": f"upstream connection failed: {exc}"})
     else:
         handle_passthrough(handler, settings, method, path, body)
 

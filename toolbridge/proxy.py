@@ -59,19 +59,24 @@ def fetch_upstream(
 
     try:
         with urllib.request.urlopen(req, timeout=settings.upstream_timeout) as resp:
-            body = resp.read()
+            resp_body = resp.read()
             hdrs = {k.lower(): v for k, v in resp.headers.items()}
-            return resp.status, body, hdrs
+            return resp.status, resp_body, hdrs
     except urllib.error.HTTPError as exc:
-        body = exc.read() if exc.fp else b""
-        raise UpstreamError(exc.code, body) from exc
+        err_body = exc.read() if exc.fp else b""
+        raise UpstreamError(exc.code, err_body) from exc
+    except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        raise UpstreamError(502, json.dumps({"error": f"upstream connection failed: {exc}"}).encode()) from exc
 
 
 def fetch_upstream_chat(payload: dict, settings: Settings) -> dict:
     """Send a Chat Completions request and return the parsed JSON response."""
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     status, resp_body, _ = fetch_upstream("POST", "/v1/chat/completions", body, settings)
-    return json.loads(resp_body)
+    try:
+        return json.loads(resp_body)
+    except (json.JSONDecodeError, ValueError):
+        return {"error": f"upstream returned invalid JSON (status {status})"}
 
 
 def stream_upstream_chat(payload: dict, settings: Settings) -> http.client.HTTPResponse:
@@ -82,5 +87,8 @@ def stream_upstream_chat(payload: dict, settings: Settings) -> http.client.HTTPR
     path = base + "/v1/chat/completions"
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = build_upstream_headers(None, settings)
-    conn.request("POST", path, body=body, headers=headers)
-    return conn.getresponse()
+    try:
+        conn.request("POST", path, body=body, headers=headers)
+        return conn.getresponse()
+    except (OSError, TimeoutError) as exc:
+        raise UpstreamError(502, json.dumps({"error": f"upstream connection failed: {exc}"}).encode()) from exc

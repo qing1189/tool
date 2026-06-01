@@ -89,9 +89,16 @@ class BridgeHandler(BaseHTTPRequestHandler):
                 self.server.hot_reload(new_settings)
             return
 
-        length = int(self.headers.get("Content-Length", 0))
-        body = self.rfile.read(length) if length else None
-        dispatch(self, self.server.current_settings, "POST", self.path, body)
+        # For routed handlers (handle_chat, handle_anthropic), they read body themselves.
+        # For passthrough, we read body here and pass it through dispatch.
+        clean_path = path.rstrip("/") if path != "/" else path
+        from .router import _ROUTE_TABLE
+        if (self.command, clean_path) in _ROUTE_TABLE:
+            dispatch(self, self.server.current_settings, "POST", self.path, None)
+        else:
+            length = int(self.headers.get("Content-Length", 0))
+            body = self.rfile.read(length) if length else None
+            dispatch(self, self.server.current_settings, "POST", self.path, body)
 
     def log_message(self, format: str, *args: Any) -> None:
         # Minimal logging to stdout

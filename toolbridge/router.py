@@ -98,12 +98,16 @@ def _passthrough_chat(handler: Any, body: dict, stream: bool, settings: Settings
         print(f"[router] passthrough_chat: streaming mode", flush=True)
         resp = stream_upstream_chat(body, settings)
         begin_sse_response(handler)
-        while True:
-            chunk = resp.read(4096)
-            if not chunk:
-                break
-            handler.wfile.write(chunk)
-            handler.wfile.flush()
+        # Read line-by-line for SSE (event stream is line-oriented protocol)
+        try:
+            while True:
+                line = resp.readline()
+                if not line:
+                    break
+                handler.wfile.write(line)
+                handler.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            print(f"[router] passthrough_chat: client disconnected", flush=True)
         print(f"[router] passthrough_chat: stream complete", flush=True)
     else:
         print(f"[router] passthrough_chat: non-streaming mode", flush=True)

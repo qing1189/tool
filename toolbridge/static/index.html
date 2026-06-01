@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ToolBridge Admin</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f0f2f5; color: #333; min-height: 100vh; }
+.header { background: #1a1a2e; color: #fff; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+.header h1 { font-size: 20px; font-weight: 600; }
+.header .right { display: flex; align-items: center; gap: 12px; }
+.header .status { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.header .dot { width: 8px; height: 8px; border-radius: 50%; background: #52c41a; }
+.logout-btn { background: rgba(255,255,255,.15); border: 1px solid rgba(255,255,255,.3); color: #fff; padding: 4px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+.logout-btn:hover { background: rgba(255,255,255,.25); }
+.container { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+.card { background: #fff; border-radius: 8px; padding: 24px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+.card h2 { font-size: 16px; margin-bottom: 16px; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0; color: #1a1a2e; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; color: #555; }
+.form-group .hint { font-size: 12px; color: #999; margin-top: 2px; }
+input[type="text"], input[type="number"], input[type="password"], textarea { width: 100%; padding: 8px 12px; border: 1px solid #d9d9d9; border-radius: 4px; font-size: 14px; transition: border-color .2s; }
+input:focus, textarea:focus { outline: none; border-color: #4096ff; box-shadow: 0 0 0 2px rgba(64,150,255,.1); }
+textarea { min-height: 80px; font-family: monospace; resize: vertical; }
+.row { display: flex; gap: 16px; }
+.row .form-group { flex: 1; }
+.switch-group { display: flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+.switch { position: relative; width: 40px; height: 22px; cursor: pointer; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch .slider { position: absolute; inset: 0; background: #ccc; border-radius: 11px; transition: .3s; }
+.switch .slider::before { content: ''; position: absolute; width: 18px; height: 18px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: .3s; }
+.switch input:checked + .slider { background: #4096ff; }
+.switch input:checked + .slider::before { transform: translateX(18px); }
+.switch-group label { font-size: 13px; color: #555; cursor: pointer; }
+.btn { padding: 8px 20px; border: none; border-radius: 4px; font-size: 14px; cursor: pointer; transition: all .2s; }
+.btn-primary { background: #4096ff; color: #fff; }
+.btn-primary:hover { background: #1677ff; }
+.btn-success { background: #52c41a; color: #fff; }
+.btn-success:hover { background: #389e0d; }
+.btn-secondary { background: #f0f0f0; color: #333; border: 1px solid #d9d9d9; }
+.btn-secondary:hover { border-color: #4096ff; color: #4096ff; }
+.btn-danger { background: #ff4d4f; color: #fff; }
+.btn-danger:hover { background: #cf1322; }
+.btn:disabled { opacity: .5; cursor: not-allowed; }
+.actions { display: flex; gap: 12px; margin-top: 20px; }
+.toast { position: fixed; top: 20px; right: 20px; padding: 12px 20px; border-radius: 6px; color: #fff; font-size: 14px; z-index: 9999; animation: slideIn .3s ease; }
+.toast.success { background: #52c41a; }
+.toast.error { background: #ff4d4f; }
+.toast.info { background: #4096ff; }
+@keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.model-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.model-tag { background: #f0f5ff; border: 1px solid #adc6ff; color: #1d39c4; padding: 4px 10px; border-radius: 4px; font-size: 12px; display: flex; align-items: center; gap: 6px; }
+.model-tag .remove { cursor: pointer; color: #999; font-weight: bold; }
+.model-tag .remove:hover { color: #ff4d4f; }
+.fetch-models-row { display: flex; gap: 12px; align-items: flex-end; margin-bottom: 12px; }
+.upstream-models { margin-top: 12px; }
+.upstream-models .model-item { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid #f5f5f5; font-size: 13px; }
+.upstream-models .model-item:last-child { border-bottom: none; }
+.upstream-models .model-item input[type="checkbox"] { width: 16px; height: 16px; }
+.mapping-table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+.mapping-table th, .mapping-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #f0f0f0; font-size: 13px; }
+.mapping-table th { background: #fafafa; font-weight: 500; }
+.mapping-table input { width: 100%; padding: 4px 8px; border: 1px solid #d9d9d9; border-radius: 3px; font-size: 13px; }
+.mapping-row .remove-btn { color: #ff4d4f; cursor: pointer; font-size: 18px; }
+.mapping-row .remove-btn:hover { color: #cf1322; }
+.loading { display: inline-block; width: 14px; height: 14px; border: 2px solid #fff; border-top-color: transparent; border-radius: 50%; animation: spin .6s linear infinite; margin-right: 6px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+/* Login page */
+.login-wrapper { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+.login-box { background: #fff; border-radius: 8px; padding: 40px; width: 360px; box-shadow: 0 4px 20px rgba(0,0,0,.1); }
+.login-box h2 { text-align: center; margin-bottom: 24px; color: #1a1a2e; }
+.login-box .form-group { margin-bottom: 20px; }
+.login-box .btn { width: 100%; padding: 10px; font-size: 15px; }
+.login-error { color: #ff4d4f; font-size: 13px; text-align: center; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+// ============ Auth State ============
+let authToken = localStorage.getItem('tb_admin_token') || '';
+let needLogin = false;
+
+// ============ Toast ============
+function showToast(msg, type = 'success') {
+  const el = document.createElement('div');
+  el.className = 'toast ' + type;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 3000);
+}
+
+// ============ API helper ============
+async function api(method, path, body = null) {
+  const opts = { method, headers: {} };
+  if (authToken) opts.headers['Authorization'] = 'Bearer ' + authToken;
+  if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+  const resp = await fetch(path, opts);
+  const data = await resp.json();
+  if (resp.status === 401 && data.need_login) {
+    authToken = '';
+    localStorage.removeItem('tb_admin_token');
+    renderLogin();
+    throw new Error('need_login');
+  }
+  return { status: resp.status, data };
+}
+
+// ============ Check auth on load ============
+async function checkAuth() {
+  try {
+    const resp = await api('GET', '/admin/api/auth_check');
+    needLogin = resp.data.need_login;
+    if (needLogin && !resp.data.authenticated) {
+      renderLogin();
+    } else {
+      renderMain();
+    }
+  } catch (e) {
+    if (e.message !== 'need_login') renderLogin();
+  }
+}
+
+// ============ Login page ============
+function renderLogin() {
+  document.getElementById('app').innerHTML = `
+    <div class="login-wrapper">
+      <div class="login-box">
+        <h2>ToolBridge Admin</h2>
+        <div class="form-group">
+          <label>管理密码</label>
+          <input type="password" id="loginPassword" placeholder="请输入管理密码" onkeydown="if(event.key==='Enter')doLogin()">
+        </div>
+        <button class="btn btn-primary" onclick="doLogin()">登 录</button>
+        <div class="login-error" id="loginError"></div>
+      </div>
+    </div>`;
+  setTimeout(() => document.getElementById('loginPassword')?.focus(), 100);
+}
+
+async function doLogin() {
+  const pw = document.getElementById('loginPassword').value;
+  const errEl = document.getElementById('loginError');
+  errEl.textContent = '';
+  try {
+    const resp = await fetch('/admin/api/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw })
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      authToken = data.token;
+      localStorage.setItem('tb_admin_token', authToken);
+      renderMain();
+    } else {
+      errEl.textContent = data.error || '登录失败';
+    }
+  } catch (e) {
+    errEl.textContent = '网络错误';
+  }
+}
+
+function doLogout() {
+  authToken = '';
+  localStorage.removeItem('tb_admin_token');
+  if (needLogin) renderLogin();
+  else showToast('已退出', 'info');
+}
+
+// ============ Main admin page ============
+function renderMain() {
+  document.getElementById('app').innerHTML = `
+<div class="header">
+  <h1>ToolBridge Admin</h1>
+  <div class="right">
+    <div class="status"><span class="dot" id="statusDot"></span><span id="statusText">Running</span></div>
+    ${needLogin ? '<button class="logout-btn" onclick="doLogout()">退出登录</button>' : ''}
+  </div>
+</div>
+<div class="container">
+  <div class="card">
+    <h2>上游配置</h2>
+    <div class="form-group">
+      <label>上游 API 地址 (UPSTREAM_BASE_URL)</label>
+      <input type="text" id="upstream_url" placeholder="http://127.0.0.1:3000">
+    </div>
+    <div class="form-group">
+      <label>上游认证头 (UPSTREAM_AUTH_HEADER)</label>
+      <input type="text" id="upstream_auth" placeholder="输入API Key即可，会自动附加 Bearer 前缀">
+      <div class="hint">只填写 API Key 会自动添加 "Bearer " 前缀；如需其他格式请完整填写如 "Basic xxx"</div>
+    </div>
+    <div class="row">
+      <div class="form-group"><label>上游超时秒数</label><input type="number" id="upstream_timeout" value="240" min="10"></div>
+      <div class="form-group"><label>额外请求体字段 (JSON)</label><input type="text" id="upstream_extra" placeholder="{}"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>服务配置</h2>
+    <div class="row">
+      <div class="form-group"><label>监听地址</label><input type="text" id="listen_host" value="0.0.0.0"></div>
+      <div class="form-group"><label>监听端口</label><input type="number" id="listen_port" value="8080" min="1" max="65535"></div>
+    </div>
+    <div class="switch-group"><label class="switch"><input type="checkbox" id="allow_unmapped" checked><span class="slider"></span></label><label for="allow_unmapped">允许未映射模型直通</label></div>
+    <div class="switch-group"><label class="switch"><input type="checkbox" id="fc_retry" checked><span class="slider"></span></label><label for="fc_retry">解析失败自动重试</label></div>
+    <div class="row">
+      <div class="form-group"><label>最大重试次数</label><input type="number" id="max_retry" value="3" min="1" max="10"></div>
+      <div class="form-group"><label>重试间隔(秒)</label><input type="number" id="retry_delay" value="0" min="0" step="0.5"></div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>模型管理</h2>
+    <div class="fetch-models-row">
+      <button class="btn btn-secondary" onclick="fetchUpstreamModels()">从上游获取模型列表</button>
+      <span id="fetchStatus" style="font-size:13px;color:#999;"></span>
+    </div>
+    <div class="upstream-models" id="upstreamModelsPanel" style="display:none;">
+      <h3 style="font-size:14px;margin-bottom:8px;">上游可用模型 (勾选添加到公开列表)</h3>
+      <div id="upstreamModelsList"></div>
+      <div style="margin-top:10px;"><button class="btn btn-primary" onclick="addSelectedModels()">添加选中模型</button></div>
+    </div>
+    <div class="form-group" style="margin-top:16px;">
+      <label>公开模型列表 (PUBLIC_MODEL_IDS_JSON)</label>
+      <div class="model-list" id="publicModels"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <input type="text" id="newModelId" placeholder="手动添加模型ID" style="flex:1;" onkeydown="if(event.key==='Enter')addPublicModel()">
+        <button class="btn btn-secondary" onclick="addPublicModel()">添加</button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label>原生 Tool Calling 模型 (NATIVE_TOOL_MODELS_JSON)</label>
+      <div class="model-list" id="nativeModels"></div>
+      <div style="margin-top:8px;display:flex;gap:8px;">
+        <input type="text" id="newNativeModelId" placeholder="添加原生tool calling模型ID" style="flex:1;" onkeydown="if(event.key==='Enter')addNativeModel()">
+        <button class="btn btn-secondary" onclick="addNativeModel()">添加</button>
+      </div>
+    </div>
+  </div>
+  <div class="card">
+    <h2>模型映射</h2>
+    <div class="hint" style="margin-bottom:12px;">将外部请求的模型名映射到上游实际模型名</div>
+    <table class="mapping-table"><thead><tr><th>外部名称</th><th>上游名称</th><th></th></tr></thead><tbody id="mappingBody"></tbody></table>
+    <button class="btn btn-secondary" style="margin-top:12px;" onclick="addMappingRow()">+ 添加映射</button>
+  </div>
+  <div class="card">
+    <h2>高级设置</h2>
+    <div class="form-group"><label>Tool Prompt 前言 (可选)</label><textarea id="tool_preamble" placeholder="自定义虚拟tool calling的prompt前言"></textarea></div>
+  </div>
+  <div class="card">
+    <h2>修改管理密码</h2>
+    <div class="row">
+      <div class="form-group"><label>新密码 (留空则取消密码保护)</label><input type="password" id="new_admin_password" placeholder="输入新密码，留空取消密码"></div>
+      <div class="form-group" style="display:flex;align-items:flex-end;"><button class="btn btn-danger" onclick="changePassword()">更新密码</button></div>
+    </div>
+  </div>
+  <div class="actions">
+    <button class="btn btn-success" id="saveBtn" onclick="saveConfig()">保存并应用 (热加载)</button>
+    <button class="btn btn-secondary" onclick="loadConfig()">重新加载</button>
+  </div>
+</div>`;
+  loadConfig();
+  checkStatus();
+  setInterval(checkStatus, 10000);
+}
+
+// ============ Config State ============
+let currentConfig = {};
+let publicModelIds = [];
+let nativeModelIds = [];
+let modelMapping = {};
+
+async function loadConfig() {
+  try {
+    const resp = await api('GET', '/admin/api/config');
+    currentConfig = resp.data;
+    populateForm(currentConfig);
+    showToast('配置已加载', 'info');
+  } catch (e) { if (e.message !== 'need_login') showToast('加载失败: ' + e.message, 'error'); }
+}
+
+function populateForm(cfg) {
+  document.getElementById('upstream_url').value = cfg.UPSTREAM_BASE_URL || '';
+  document.getElementById('upstream_auth').value = cfg.UPSTREAM_AUTH_HEADER || '';
+  document.getElementById('upstream_timeout').value = cfg.UPSTREAM_TIMEOUT_SECONDS || 240;
+  document.getElementById('upstream_extra').value = cfg.UPSTREAM_EXTRA_BODY_JSON ? JSON.stringify(cfg.UPSTREAM_EXTRA_BODY_JSON) : '{}';
+  document.getElementById('listen_host').value = cfg.HOST || '0.0.0.0';
+  document.getElementById('listen_port').value = cfg.PORT || 8080;
+  document.getElementById('allow_unmapped').checked = cfg.ALLOW_UNMAPPED_MODEL_PASSTHROUGH !== false;
+  document.getElementById('fc_retry').checked = cfg.FC_ERROR_RETRY !== false;
+  document.getElementById('max_retry').value = cfg.FC_ERROR_RETRY_MAX_ATTEMPTS || 3;
+  document.getElementById('retry_delay').value = cfg.RETRY_DELAY_SECONDS || 0;
+  document.getElementById('tool_preamble').value = cfg.TOOL_PROMPT_PREAMBLE || '';
+  publicModelIds = cfg.PUBLIC_MODEL_IDS_JSON || [];
+  renderPublicModels();
+  nativeModelIds = cfg.NATIVE_TOOL_MODELS_JSON || [];
+  renderNativeModels();
+  modelMapping = cfg.MODEL_MAP_JSON || {};
+  renderMappingTable();
+}
+
+function renderPublicModels() {
+  const c = document.getElementById('publicModels');
+  if (!c) return;
+  c.innerHTML = publicModelIds.map((id, i) => `<span class="model-tag">${id}<span class="remove" onclick="removePublicModel(${i})">×</span></span>`).join('');
+}
+function addPublicModel() { const input = document.getElementById('newModelId'); const v = input.value.trim(); if (v && !publicModelIds.includes(v)) { publicModelIds.push(v); renderPublicModels(); input.value = ''; } }
+function removePublicModel(i) { publicModelIds.splice(i, 1); renderPublicModels(); }
+
+function renderNativeModels() {
+  const c = document.getElementById('nativeModels');
+  if (!c) return;
+  c.innerHTML = nativeModelIds.map((id, i) => `<span class="model-tag">${id}<span class="remove" onclick="removeNativeModel(${i})">×</span></span>`).join('');
+}
+function addNativeModel() { const input = document.getElementById('newNativeModelId'); const v = input.value.trim(); if (v && !nativeModelIds.includes(v)) { nativeModelIds.push(v); renderNativeModels(); input.value = ''; } }
+function removeNativeModel(i) { nativeModelIds.splice(i, 1); renderNativeModels(); }
+
+function renderMappingTable() {
+  const tbody = document.getElementById('mappingBody');
+  if (!tbody) return;
+  const entries = Object.entries(modelMapping);
+  tbody.innerHTML = entries.map(([ext, up], i) => `<tr class="mapping-row"><td><input type="text" value="${ext}" data-index="${i}" data-field="key"></td><td><input type="text" value="${up}" data-index="${i}" data-field="value"></td><td><span class="remove-btn" onclick="removeMappingRow(${i})">×</span></td></tr>`).join('');
+}
+function addMappingRow() { modelMapping[''] = ''; renderMappingTable(); }
+function removeMappingRow(i) { const e = Object.entries(modelMapping); e.splice(i, 1); modelMapping = Object.fromEntries(e); renderMappingTable(); }
+function collectMapping() { const rows = document.querySelectorAll('#mappingBody .mapping-row'); const r = {}; rows.forEach(row => { const k = row.querySelector('[data-field="key"]').value.trim(); const v = row.querySelector('[data-field="value"]').value.trim(); if (k) r[k] = v; }); return r; }
+
+async function fetchUpstreamModels() {
+  const statusEl = document.getElementById('fetchStatus');
+  statusEl.textContent = '正在获取...';
+  const baseUrl = document.getElementById('upstream_url').value.trim();
+  const auth = document.getElementById('upstream_auth').value.trim();
+  try {
+    const resp = await api('POST', '/admin/api/fetch_models', { base_url: baseUrl, auth_header: auth });
+    if (resp.data.ok && resp.data.models.length > 0) {
+      statusEl.textContent = `获取到 ${resp.data.models.length} 个模型`;
+      renderUpstreamModels(resp.data.models);
+    } else { statusEl.textContent = resp.data.error || '未获取到模型'; showToast('获取模型失败', 'error'); }
+  } catch (e) { if (e.message !== 'need_login') { statusEl.textContent = '请求失败'; showToast('获取失败', 'error'); } }
+}
+function renderUpstreamModels(models) {
+  document.getElementById('upstreamModelsPanel').style.display = 'block';
+  document.getElementById('upstreamModelsList').innerHTML = models.map(id => `<div class="model-item"><input type="checkbox" value="${id}" ${publicModelIds.includes(id) ? 'checked disabled' : ''}><span>${id}</span>${publicModelIds.includes(id) ? '<span style="color:#999;font-size:12px;">(已添加)</span>' : ''}</div>`).join('');
+}
+function addSelectedModels() {
+  const cbs = document.querySelectorAll('#upstreamModelsList input[type="checkbox"]:checked:not(:disabled)');
+  let n = 0; cbs.forEach(cb => { if (!publicModelIds.includes(cb.value)) { publicModelIds.push(cb.value); n++; } });
+  renderPublicModels();
+  if (n > 0) { showToast(`已添加 ${n} 个模型`); fetchUpstreamModels(); }
+}
+
+async function saveConfig() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="loading"></span>保存中...';
+  let extraFields = {};
+  try { const raw = document.getElementById('upstream_extra').value.trim(); if (raw) extraFields = JSON.parse(raw); }
+  catch (e) { showToast('额外字段JSON格式错误', 'error'); btn.disabled = false; btn.textContent = '保存并应用 (热加载)'; return; }
+  const config = {
+    HOST: document.getElementById('listen_host').value.trim(),
+    PORT: parseInt(document.getElementById('listen_port').value) || 8080,
+    UPSTREAM_BASE_URL: document.getElementById('upstream_url').value.trim(),
+    UPSTREAM_AUTH_HEADER: document.getElementById('upstream_auth').value.trim(),
+    UPSTREAM_TIMEOUT_SECONDS: parseInt(document.getElementById('upstream_timeout').value) || 240,
+    UPSTREAM_EXTRA_BODY_JSON: extraFields,
+    MODEL_MAP_JSON: collectMapping(),
+    ALLOW_UNMAPPED_MODEL_PASSTHROUGH: document.getElementById('allow_unmapped').checked,
+    NATIVE_TOOL_MODELS_JSON: nativeModelIds,
+    PUBLIC_MODEL_IDS_JSON: publicModelIds,
+    TOOL_PROMPT_PREAMBLE: document.getElementById('tool_preamble').value,
+    FC_ERROR_RETRY: document.getElementById('fc_retry').checked,
+    FC_ERROR_RETRY_MAX_ATTEMPTS: parseInt(document.getElementById('max_retry').value) || 3,
+    RETRY_DELAY_SECONDS: parseFloat(document.getElementById('retry_delay').value) || 0,
+  };
+  try {
+    const resp = await api('POST', '/admin/api/config', config);
+    if (resp.data.ok) showToast('配置已保存并热加载生效');
+    else showToast('保存失败: ' + (resp.data.error || ''), 'error');
+  } catch (e) { if (e.message !== 'need_login') showToast('保存失败', 'error'); }
+  btn.disabled = false; btn.textContent = '保存并应用 (热加载)';
+}
+
+async function changePassword() {
+  const pw = document.getElementById('new_admin_password').value;
+  try {
+    const resp = await api('POST', '/admin/api/change_password', { new_password: pw });
+    if (resp.data.ok) {
+      showToast(resp.data.message || '密码已更新');
+      if (pw) { authToken = ''; localStorage.removeItem('tb_admin_token'); setTimeout(() => renderLogin(), 1500); }
+    } else { showToast(resp.data.error || '更新失败', 'error'); }
+  } catch (e) { if (e.message !== 'need_login') showToast('更新失败', 'error'); }
+}
+
+async function checkStatus() {
+  try {
+    const resp = await fetch('/admin/api/status');
+    const data = await resp.json();
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    if (dot) { dot.style.background = '#52c41a'; txt.textContent = `Running on :${data.port} | ${data.model_count} models`; }
+  } catch (e) {
+    const dot = document.getElementById('statusDot');
+    const txt = document.getElementById('statusText');
+    if (dot) { dot.style.background = '#ff4d4f'; txt.textContent = 'Disconnected'; }
+  }
+}
+
+// ============ Init ============
+checkAuth();
+</script>
+</body>
+</html>

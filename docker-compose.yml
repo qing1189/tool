@@ -16,3 +16,8 @@ services:
       - FC_ERROR_RETRY_MAX_ATTEMPTS=${FC_ERROR_RETRY_MAX_ATTEMPTS:-3}
     ports:
       - "${PORT:-8080}:8080"
+    volumes:
+      - toolbridge_config:/root/.toolbridge
+
+volumes:
+  toolbridge_config:

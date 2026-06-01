@@ -67,6 +67,7 @@ class Settings:
     retry_on_parse_failure: bool = True
     max_retry_attempts: int = 3
     retry_delay_seconds: float = 0.0
+    admin_password: str = ""
 
     # ------------------------------------------------------------------
     # Model resolution helpers
@@ -108,6 +109,7 @@ class Settings:
         "retry_on_parse_failure": "FC_ERROR_RETRY",
         "max_retry_attempts": "FC_ERROR_RETRY_MAX_ATTEMPTS",
         "retry_delay_seconds": "RETRY_DELAY_SECONDS",
+        "admin_password": "ADMIN_PASSWORD",
     }
 
     def to_dict(self) -> dict:
@@ -138,6 +140,7 @@ class Settings:
             retry_on_parse_failure=bool(data.get("FC_ERROR_RETRY", True)),
             max_retry_attempts=int(data.get("FC_ERROR_RETRY_MAX_ATTEMPTS", 3)),
             retry_delay_seconds=float(data.get("RETRY_DELAY_SECONDS", 0)),
+            admin_password=str(data.get("ADMIN_PASSWORD", "")),
         )
 
     # ------------------------------------------------------------------
@@ -161,4 +164,5 @@ class Settings:
             retry_on_parse_failure=_env_bool("FC_ERROR_RETRY", True),
             max_retry_attempts=_env_int("FC_ERROR_RETRY_MAX_ATTEMPTS", 3),
             retry_delay_seconds=float(os.environ.get("RETRY_DELAY_SECONDS", "0")),
+            admin_password=_env_str("ADMIN_PASSWORD"),
         )

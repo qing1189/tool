@@ -15,7 +15,7 @@ def main() -> None:
         settings = _load_settings_for_desktop()
         TrayApp(settings).run()
     else:
-        settings = Settings.from_environment()
+        settings = _load_settings()
         run_server(settings)
 
 
@@ -24,6 +24,21 @@ def _should_launch_gui() -> bool:
     if sys.platform == "win32":
         return sys.executable.lower().endswith("pythonw.exe")
     return False
+
+
+def _load_settings() -> Settings:
+    """Load from config file first, fall back to environment.
+
+    This allows the web admin to persist config changes that survive restarts.
+    """
+    from .config_file import load_config
+
+    file_cfg = load_config()
+    if file_cfg:
+        print("[bridge] loaded configuration from config file")
+        return Settings.from_dict(file_cfg)
+    print("[bridge] using environment variables for configuration")
+    return Settings.from_environment()
 
 
 def _load_settings_for_desktop() -> Settings:

@@ -8,6 +8,16 @@ from typing import Any
 
 from .config import Settings
 from .router import dispatch
+from .web_admin import (
+    handle_admin_page,
+    handle_admin_get_config,
+    handle_admin_save_config,
+    handle_admin_fetch_models,
+    handle_admin_status,
+    handle_admin_login,
+    handle_admin_check_auth,
+    handle_admin_change_password,
+)
 
 
 class BridgeServer(ThreadingHTTPServer):
@@ -15,7 +25,19 @@ class BridgeServer(ThreadingHTTPServer):
 
     def __init__(self, address: tuple[str, int], handler_cls: type, settings: Settings):
         self.settings = settings
+        self._settings_lock = threading.Lock()
         super().__init__(address, handler_cls)
+
+    def hot_reload(self, new_settings: Settings) -> None:
+        """Hot-reload configuration without restarting the server."""
+        with self._settings_lock:
+            self.settings = new_settings
+        print(f"[bridge] configuration hot-reloaded (upstream: {new_settings.upstream_url})")
+
+    @property
+    def current_settings(self) -> Settings:
+        with self._settings_lock:
+            return self.settings
 
 
 class BridgeHandler(BaseHTTPRequestHandler):
@@ -31,15 +53,45 @@ class BridgeHandler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_GET(self) -> None:
-        dispatch(self, self.server.settings, "GET", self.path, None)
+        path = self.path.split("?")[0]  # strip query string
+        # Admin routes
+        if path == "/admin" or path == "/admin/":
+            handle_admin_page(self)
+        elif path == "/admin/api/config":
+            handle_admin_get_config(self, self.server.current_settings)
+        elif path == "/admin/api/status":
+            handle_admin_status(self, self.server.current_settings)
+        elif path == "/admin/api/auth_check":
+            handle_admin_check_auth(self, self.server.current_settings)
+        else:
+            dispatch(self, self.server.current_settings, "GET", self.path, None)
 
     def do_HEAD(self) -> None:
-        dispatch(self, self.server.settings, "HEAD", self.path, None)
+        dispatch(self, self.server.current_settings, "HEAD", self.path, None)
 
     def do_POST(self) -> None:
+        path = self.path.split("?")[0]
+        # Admin API routes
+        if path == "/admin/api/login":
+            handle_admin_login(self, self.server.current_settings)
+            return
+        elif path == "/admin/api/config":
+            new_settings = handle_admin_save_config(self, self.server.current_settings)
+            if new_settings is not self.server.current_settings:
+                self.server.hot_reload(new_settings)
+            return
+        elif path == "/admin/api/fetch_models":
+            handle_admin_fetch_models(self, self.server.current_settings)
+            return
+        elif path == "/admin/api/change_password":
+            new_settings = handle_admin_change_password(self, self.server.current_settings)
+            if new_settings is not self.server.current_settings:
+                self.server.hot_reload(new_settings)
+            return
+
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(length) if length else None
-        dispatch(self, self.server.settings, "POST", self.path, body)
+        dispatch(self, self.server.current_settings, "POST", self.path, body)
 
     def log_message(self, format: str, *args: Any) -> None:
         # Minimal logging to stdout
@@ -60,6 +112,7 @@ def run_server(settings: Settings) -> None:
     srv = create_server(settings)
     print(f"toolbridge listening on {settings.listen_host}:{settings.listen_port}")
     print(f"  upstream: {settings.upstream_url}")
+    print(f"  admin UI: http://{settings.listen_host}:{settings.listen_port}/admin")
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
@@ -100,5 +153,11 @@ def is_server_running() -> bool:
 
 def get_server_port() -> int | None:
     if _server_instance is not None:
-        return _server_instance.settings.listen_port
+        return _server_instance.current_settings.listen_port
     return None
+
+
+def hot_reload_settings(new_settings: Settings) -> None:
+    """Hot-reload settings on the running server instance."""
+    if _server_instance is not None:
+        _server_instance.hot_reload(new_settings)

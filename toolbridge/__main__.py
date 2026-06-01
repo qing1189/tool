@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+import os
 import sys
+
+# Force unbuffered stdout/stderr for Docker logging
+os.environ.setdefault("PYTHONUNBUFFERED", "1")
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(line_buffering=True)
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(line_buffering=True)
 
 from .config import Settings
 from .server import run_server

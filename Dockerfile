@@ -4,8 +4,8 @@ WORKDIR /app
 
 COPY toolbridge/ /app/toolbridge/
 
-# Config persistence volume
-VOLUME /root/.toolbridge
+# Ensure Python output is sent straight to docker logs (no buffering)
+ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8080
 

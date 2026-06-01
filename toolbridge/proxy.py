@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import urllib.parse
 import urllib.request
 import urllib.error
@@ -11,6 +12,11 @@ from typing import Any
 
 from .config import Settings
 from .errors import UpstreamError
+
+
+def _log(msg: str) -> None:
+    """Print a debug log message (flushed immediately for Docker)."""
+    print(f"[proxy] {msg}", flush=True)
 
 
 def _parse_url(url: str) -> tuple[str, int, str]:
@@ -53,19 +59,27 @@ def fetch_upstream(
     Returns (status_code, response_body, response_headers).
     """
     url = settings.upstream_url.rstrip("/") + path
+    _log(f"{method} {url} (timeout={settings.upstream_timeout}s, body={len(body) if body else 0} bytes)")
     req = urllib.request.Request(url, data=body, method=method)
     for k, v in build_upstream_headers(None, settings).items():
         req.add_header(k, v)
 
+    start = time.time()
     try:
         with urllib.request.urlopen(req, timeout=settings.upstream_timeout) as resp:
             resp_body = resp.read()
+            elapsed = time.time() - start
             hdrs = {k.lower(): v for k, v in resp.headers.items()}
+            _log(f"  <- {resp.status} ({len(resp_body)} bytes, {elapsed:.2f}s)")
             return resp.status, resp_body, hdrs
     except urllib.error.HTTPError as exc:
+        elapsed = time.time() - start
         err_body = exc.read() if exc.fp else b""
+        _log(f"  <- HTTP {exc.code} error ({len(err_body)} bytes, {elapsed:.2f}s)")
         raise UpstreamError(exc.code, err_body) from exc
     except (urllib.error.URLError, OSError, TimeoutError) as exc:
+        elapsed = time.time() - start
+        _log(f"  <- FAILED: {exc} ({elapsed:.2f}s)")
         raise UpstreamError(502, json.dumps({"error": f"upstream connection failed: {exc}"}).encode()) from exc
 
 
@@ -87,8 +101,12 @@ def stream_upstream_chat(payload: dict, settings: Settings) -> http.client.HTTPR
     path = base + "/v1/chat/completions"
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     headers = build_upstream_headers(None, settings)
+    _log(f"STREAM POST {settings.upstream_url.rstrip('/')}{path} (timeout={settings.upstream_timeout}s)")
     try:
         conn.request("POST", path, body=body, headers=headers)
-        return conn.getresponse()
+        resp = conn.getresponse()
+        _log(f"  <- stream opened, status={resp.status}")
+        return resp
     except (OSError, TimeoutError) as exc:
+        _log(f"  <- STREAM FAILED: {exc}")
         raise UpstreamError(502, json.dumps({"error": f"upstream connection failed: {exc}"}).encode()) from exc

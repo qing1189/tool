@@ -68,18 +68,21 @@ def handle_models(handler: Any, settings: Settings) -> None:
 def handle_chat(handler: Any, settings: Settings) -> None:
     body = _read_json_body(handler)
     if body is None:
+        print(f"[router] handle_chat: failed to read JSON body", flush=True)
         _send_json(handler, 400, {"error": "invalid JSON body"})
         return
 
     requested_model = body.get("model", "")
     resolved = settings.resolve_model_name(requested_model)
+    stream = body.get("stream", False)
+    tools = body.get("tools", [])
+    print(f"[router] chat: model={requested_model} -> {resolved}, stream={stream}, tools={len(tools)}", flush=True)
+
     if resolved is None:
         _send_json(handler, 400, {"error": f"unknown model: {requested_model}"})
         return
 
     body["model"] = resolved
-    stream = body.get("stream", False)
-    tools = body.get("tools", [])
 
     # Native passthrough
     if not tools or settings.is_native_tool_model(requested_model):
@@ -92,6 +95,7 @@ def handle_chat(handler: Any, settings: Settings) -> None:
 
 def _passthrough_chat(handler: Any, body: dict, stream: bool, settings: Settings) -> None:
     if stream:
+        print(f"[router] passthrough_chat: streaming mode", flush=True)
         resp = stream_upstream_chat(body, settings)
         begin_sse_response(handler)
         while True:
@@ -100,7 +104,9 @@ def _passthrough_chat(handler: Any, body: dict, stream: bool, settings: Settings
                 break
             handler.wfile.write(chunk)
             handler.wfile.flush()
+        print(f"[router] passthrough_chat: stream complete", flush=True)
     else:
+        print(f"[router] passthrough_chat: non-streaming mode", flush=True)
         result = fetch_upstream_chat(body, settings)
         _send_json(handler, 200, result)
 
@@ -543,10 +549,13 @@ def dispatch(handler: Any, settings: Settings, method: str, path: str, body: byt
         try:
             handler_fn(handler, settings)
         except UpstreamError as exc:
+            print(f"[router] UpstreamError: status={exc.status}", flush=True)
             _send_json(handler, 502, {"error": f"upstream returned {exc.status}"})
         except BridgeError as exc:
+            print(f"[router] BridgeError: {exc}", flush=True)
             _send_json(handler, 500, {"error": str(exc)})
         except Exception as exc:
+            print(f"[router] Exception: {type(exc).__name__}: {exc}", flush=True)
             _send_json(handler, 502, {"error": f"upstream connection failed: {exc}"})
     else:
         handle_passthrough(handler, settings, method, path, body)

@@ -32,7 +32,7 @@ class BridgeServer(ThreadingHTTPServer):
         """Hot-reload configuration without restarting the server."""
         with self._settings_lock:
             self.settings = new_settings
-        print(f"[bridge] configuration hot-reloaded (upstream: {new_settings.upstream_url})")
+        print(f"[bridge] configuration hot-reloaded (upstream: {new_settings.upstream_url})", flush=True)
 
     @property
     def current_settings(self) -> Settings:
@@ -101,8 +101,8 @@ class BridgeHandler(BaseHTTPRequestHandler):
             dispatch(self, self.server.current_settings, "POST", self.path, body)
 
     def log_message(self, format: str, *args: Any) -> None:
-        # Minimal logging to stdout
-        print(f"[bridge] {format % args}")
+        # Minimal logging to stdout (flushed for Docker)
+        print(f"[bridge] {format % args}", flush=True)
 
 
 def create_server(settings: Settings) -> BridgeServer:
@@ -117,13 +117,13 @@ def create_server(settings: Settings) -> BridgeServer:
 def run_server(settings: Settings) -> None:
     """Create and start the server. Blocks until interrupted."""
     srv = create_server(settings)
-    print(f"toolbridge listening on {settings.listen_host}:{settings.listen_port}")
-    print(f"  upstream: {settings.upstream_url}")
-    print(f"  admin UI: http://{settings.listen_host}:{settings.listen_port}/admin")
+    print(f"toolbridge listening on {settings.listen_host}:{settings.listen_port}", flush=True)
+    print(f"  upstream: {settings.upstream_url}", flush=True)
+    print(f"  admin UI: http://{settings.listen_host}:{settings.listen_port}/admin", flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
-        print("\nshutting down")
+        print("\nshutting down", flush=True)
         srv.shutdown()
 
 

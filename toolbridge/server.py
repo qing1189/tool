@@ -23,6 +23,9 @@ from .web_admin import (
 class BridgeServer(ThreadingHTTPServer):
     """Threading HTTP server that holds application settings."""
 
+    # Ensure worker threads are daemon so they don't block shutdown
+    daemon_threads = True
+
     def __init__(self, address: tuple[str, int], handler_cls: type, settings: Settings):
         self.settings = settings
         self._settings_lock = threading.Lock()

@@ -105,6 +105,10 @@ def stream_upstream_chat(payload: dict, settings: Settings) -> http.client.HTTPR
     try:
         conn.request("POST", path, body=body, headers=headers)
         resp = conn.getresponse()
+        # Set read timeout on the socket to prevent infinite blocking on readline()
+        sock = resp.fp.raw._sock if hasattr(resp, 'fp') and hasattr(resp.fp, 'raw') and hasattr(resp.fp.raw, '_sock') else None
+        if sock:
+            sock.settimeout(settings.upstream_timeout)
         _log(f"  <- stream opened, status={resp.status}")
         return resp
     except (OSError, TimeoutError) as exc:

@@ -99,6 +99,9 @@ def _passthrough_chat(handler: Any, body: dict, stream: bool, settings: Settings
         resp = stream_upstream_chat(body, settings)
         begin_sse_response(handler)
         # Read line-by-line for SSE (event stream is line-oriented protocol)
+        # Set a socket-level read timeout to prevent threads from hanging forever
+        if hasattr(resp, 'fp') and hasattr(resp.fp, 'raw') and hasattr(resp.fp.raw, '_sock'):
+            resp.fp.raw._sock.settimeout(settings.upstream_timeout)
         try:
             while True:
                 line = resp.readline()
@@ -108,6 +111,14 @@ def _passthrough_chat(handler: Any, body: dict, stream: bool, settings: Settings
                 handler.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             print(f"[router] passthrough_chat: client disconnected", flush=True)
+        except (TimeoutError, OSError) as exc:
+            print(f"[router] passthrough_chat: stream read timeout/error: {exc}", flush=True)
+        finally:
+            # Always close the upstream connection to free resources
+            try:
+                resp.close()
+            except Exception:
+                pass
         print(f"[router] passthrough_chat: stream complete", flush=True)
     else:
         print(f"[router] passthrough_chat: non-streaming mode", flush=True)
@@ -183,6 +194,10 @@ def _stream_virtual_tool_call(
     conn.request("POST", path, body=raw_body, headers=headers)
     resp = conn.getresponse()
 
+    # Set socket timeout to prevent infinite blocking
+    if hasattr(resp, 'fp') and hasattr(resp.fp, 'raw') and hasattr(resp.fp.raw, '_sock'):
+        resp.fp.raw._sock.settimeout(settings.upstream_timeout)
+
     scanner = TriggerScanner(marker)
     all_content = ""
     marker_found = False
@@ -195,41 +210,49 @@ def _stream_virtual_tool_call(
 
     begin_sse_response(handler)
 
-    for sse_event in read_sse_chunks(resp):
-        data = sse_event.get("data", "")
-        if data == "[DONE]":
-            break
-        try:
-            parsed_chunk = json.loads(data)
-        except json.JSONDecodeError:
-            continue
+    try:
+        for sse_event in read_sse_chunks(resp):
+            data = sse_event.get("data", "")
+            if data == "[DONE]":
+                break
+            try:
+                parsed_chunk = json.loads(data)
+            except json.JSONDecodeError:
+                continue
 
-        delta_content = ""
-        for choice in parsed_chunk.get("choices", []):
-            delta = choice.get("delta", {})
-            if "content" in delta:
-                delta_content += delta["content"]
-            # Check for finish_reason from upstream
-            finish = choice.get("finish_reason")
+            delta_content = ""
+            for choice in parsed_chunk.get("choices", []):
+                delta = choice.get("delta", {})
+                if "content" in delta:
+                    delta_content += delta["content"]
+                # Check for finish_reason from upstream
+                finish = choice.get("finish_reason")
 
-        if delta_content:
-            all_content += delta_content
+            if delta_content:
+                all_content += delta_content
 
-            if marker_found:
-                # After marker: buffer for tool call parsing, don't emit
-                post_marker_buf += delta_content
-            else:
-                # Before marker: scan and emit real-time text deltas
-                scan_result = scanner.feed(delta_content)
-                if scan_result.prefix_text:
-                    emit_openai_text_delta(handler, base_chunk, scan_result.prefix_text)
-                if scanner.found:
-                    marker_found = True
-                    # Emit any text before marker as final text delta
+                if marker_found:
+                    # After marker: buffer for tool call parsing, don't emit
+                    post_marker_buf += delta_content
+                else:
+                    # Before marker: scan and emit real-time text deltas
+                    scan_result = scanner.feed(delta_content)
                     if scan_result.prefix_text:
-                        pass  # already emitted above
-                    # Content accumulated in scanner after marker
-                    post_marker_buf = scanner.accumulated
+                        emit_openai_text_delta(handler, base_chunk, scan_result.prefix_text)
+                    if scanner.found:
+                        marker_found = True
+                        # Content accumulated in scanner after marker
+                        post_marker_buf = scanner.accumulated
+    except (BrokenPipeError, ConnectionResetError):
+        print(f"[router] virtual_tool_stream: client disconnected", flush=True)
+    except (TimeoutError, OSError) as exc:
+        print(f"[router] virtual_tool_stream: stream error: {exc}", flush=True)
+    finally:
+        try:
+            resp.close()
+            conn.close()
+        except Exception:
+            pass
 
     # Stream complete — decide what to emit
     if marker_found:
@@ -406,6 +429,10 @@ def _passthrough_anthropic_stream(
     conn.request("POST", path, body=raw_body, headers=headers)
     resp = conn.getresponse()
 
+    # Set socket timeout to prevent infinite blocking
+    if hasattr(resp, 'fp') and hasattr(resp.fp, 'raw') and hasattr(resp.fp.raw, '_sock'):
+        resp.fp.raw._sock.settimeout(settings.upstream_timeout)
+
     # Convert OpenAI SSE stream to Anthropic SSE stream
     msg_id = f"msg_{uuid.uuid4().hex[:24]}"
     usage = {"input_tokens": 0, "output_tokens": 0}
@@ -417,70 +444,81 @@ def _passthrough_anthropic_stream(
     begin_sse_response(handler)
     emit_anthropic_message_start(handler, msg_id, requested_model, usage)
 
-    for sse_event in read_sse_chunks(resp):
-        data = sse_event.get("data", "")
-        if data == "[DONE]":
-            break
+    try:
+        for sse_event in read_sse_chunks(resp):
+            data = sse_event.get("data", "")
+            if data == "[DONE]":
+                break
+            try:
+                chunk = json.loads(data)
+            except json.JSONDecodeError:
+                continue
+
+            for choice in chunk.get("choices", []):
+                delta = choice.get("delta", {})
+                finish = choice.get("finish_reason")
+
+                if "content" in delta and delta["content"]:
+                    if in_tool_block:
+                        emit_anthropic_content_block_stop(handler, block_index)
+                        block_index += 1
+                        in_tool_block = False
+                    if not in_text_block:
+                        emit_anthropic_content_block_start(handler, block_index, {"type": "text", "text": ""})
+                        in_text_block = True
+                    emit_anthropic_content_block_delta(handler, block_index, {"type": "text_delta", "text": delta["content"]})
+
+                if "tool_calls" in delta:
+                    for tc in delta["tool_calls"]:
+                        tc_index = tc.get("index", 0)
+
+                        # New tool call starts — close previous block
+                        if tc_index != current_tool_index:
+                            if in_text_block:
+                                emit_anthropic_content_block_stop(handler, block_index)
+                                block_index += 1
+                                in_text_block = False
+                            if in_tool_block:
+                                emit_anthropic_content_block_stop(handler, block_index)
+                                block_index += 1
+                            current_tool_index = tc_index
+
+                        fn = tc.get("function", {})
+                        if fn.get("name"):
+                            if in_text_block:
+                                emit_anthropic_content_block_stop(handler, block_index)
+                                block_index += 1
+                                in_text_block = False
+                            emit_anthropic_content_block_start(handler, block_index, {
+                                "type": "tool_use", "id": tc.get("id", ""), "name": fn["name"], "input": {},
+                            })
+                            in_tool_block = True
+                        if fn.get("arguments"):
+                            emit_anthropic_content_block_delta(handler, block_index, {
+                                "type": "input_json_delta", "partial_json": fn["arguments"],
+                            })
+
+                if finish:
+                    if in_text_block:
+                        emit_anthropic_content_block_stop(handler, block_index)
+                        block_index += 1
+                        in_text_block = False
+                    if in_tool_block:
+                        emit_anthropic_content_block_stop(handler, block_index)
+                        block_index += 1
+                        in_tool_block = False
+                    stop = "end_turn" if finish == "stop" else "tool_use" if finish == "tool_calls" else "max_tokens"
+                    emit_anthropic_message_delta(handler, stop, {"output_tokens": 0})
+    except (BrokenPipeError, ConnectionResetError):
+        print(f"[router] anthropic_stream: client disconnected", flush=True)
+    except (TimeoutError, OSError) as exc:
+        print(f"[router] anthropic_stream: stream error: {exc}", flush=True)
+    finally:
         try:
-            chunk = json.loads(data)
-        except json.JSONDecodeError:
-            continue
-
-        for choice in chunk.get("choices", []):
-            delta = choice.get("delta", {})
-            finish = choice.get("finish_reason")
-
-            if "content" in delta and delta["content"]:
-                if in_tool_block:
-                    emit_anthropic_content_block_stop(handler, block_index)
-                    block_index += 1
-                    in_tool_block = False
-                if not in_text_block:
-                    emit_anthropic_content_block_start(handler, block_index, {"type": "text", "text": ""})
-                    in_text_block = True
-                emit_anthropic_content_block_delta(handler, block_index, {"type": "text_delta", "text": delta["content"]})
-
-            if "tool_calls" in delta:
-                for tc in delta["tool_calls"]:
-                    tc_index = tc.get("index", 0)
-
-                    # New tool call starts — close previous block
-                    if tc_index != current_tool_index:
-                        if in_text_block:
-                            emit_anthropic_content_block_stop(handler, block_index)
-                            block_index += 1
-                            in_text_block = False
-                        if in_tool_block:
-                            emit_anthropic_content_block_stop(handler, block_index)
-                            block_index += 1
-                        current_tool_index = tc_index
-
-                    fn = tc.get("function", {})
-                    if fn.get("name"):
-                        if in_text_block:
-                            emit_anthropic_content_block_stop(handler, block_index)
-                            block_index += 1
-                            in_text_block = False
-                        emit_anthropic_content_block_start(handler, block_index, {
-                            "type": "tool_use", "id": tc.get("id", ""), "name": fn["name"], "input": {},
-                        })
-                        in_tool_block = True
-                    if fn.get("arguments"):
-                        emit_anthropic_content_block_delta(handler, block_index, {
-                            "type": "input_json_delta", "partial_json": fn["arguments"],
-                        })
-
-            if finish:
-                if in_text_block:
-                    emit_anthropic_content_block_stop(handler, block_index)
-                    block_index += 1
-                    in_text_block = False
-                if in_tool_block:
-                    emit_anthropic_content_block_stop(handler, block_index)
-                    block_index += 1
-                    in_tool_block = False
-                stop = "end_turn" if finish == "stop" else "tool_use" if finish == "tool_calls" else "max_tokens"
-                emit_anthropic_message_delta(handler, stop, {"output_tokens": 0})
+            resp.close()
+            conn.close()
+        except Exception:
+            pass
 
     emit_anthropic_message_stop(handler)
 
